@@ -1,18 +1,8 @@
 /*
-CVL for BordaBug1.sol
-Each rule must have assertion at the end.
+CVL For BordaBug2.sol
 */
 
 import "methods/Borda.spec"
-
-// https://docs.certora.com/en/latest/docs/confluence/anatomy/hooks.html?highlight=hook
-/*definition ContendersStruct_age(uint256 s) returns uint256 =
-    s & 0xff;
-definition ContendersStruct_registered(uint256 s) returns uint256 =
-    (s & 0xff00) >>> 2 ^ 1;
-definition ContendersStruct_points(uint256 s) returns uint256 =
-    (s & 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000) >>> 2 ^ 2;
-*/
 
 ///// contenders ghost and hooks /////
 
@@ -107,79 +97,17 @@ hook Sload uint256 points pointsOfWinner STORAGE {
     require gPointsOfWinner == points;
 }
 
-
 ///////////////////////////////////////////////////////////////////////
 // Rules
 ///////////////////////////////////////////////////////////////////////
 
 
-rule registerVoter {
-    env e;
-    uint8 age;
-    address voter = e.msg.sender;
-
-    uint8 voter_details_age;
-    bool voter_details_registered;
-    bool voter_details_registered_before;
-    bool voter_details_voted;
-    uint256 voter_details_attempts;
-    bool voter_details_blacklisted;
-
-    _, voter_details_registered_before, _, _, _ = getFullVoterDetails(voter);
-
-    // Requirements
-    require(voter_details_registered_before == false);
-
-    registerVoter(e, age);
-
-    voter_details_age, voter_details_registered, voter_details_voted, voter_details_attempts, voter_details_blacklisted = getFullVoterDetails(voter);
-
-    assert hasVoted(voter) == false, "Voter not registered";
-
-    assert voter_details_attempts == 0, "Voter should not have any attempts";
-    assert voter_details_blacklisted == false, "Voter should not be blacklisted";
-
-    assert gVotersAge[voter] == age, "Voter age not set";
-    assert gVotersRegistered[voter] == true, "Voter should be registered";
-    assert gVotersAttempts[voter] == 0, "Voter should not have any attempts";
-    assert gVotersBlackListed[voter] == false, "Voter should not be blacklisted";
-}
-
-
-rule registerContender {
-    env e;
-    uint8 age;
-    address contender = e.msg.sender;
-
-    // Requirements
-    require(gContendersRegistered[contender] == false);
-
-    uint8 contender_details_age;
-    bool contender_details_registered;
-    uint256 contender_details_points;
-    contender_details_age, contender_details_registered, contender_details_points = getFullContenderDetails(contender);
-
-    require(contender_details_age == 0);
-    require(contender_details_registered == false);
-    require(contender_details_points == 0);
-    require(gContendersPoints[contender] == 0);
-    
-    assert gContendersAge[contender] == 0, "Contender age should not be set";
-    assert gContendersRegistered[contender] == false, "Contender should not be registered";
-    assert gContendersPoints[contender] == 0, "Contender points not set";
-
-    registerContender(e, age);
-
-    assert gContendersAge[contender] == age, "Contender age not set";
-    assert gContendersRegistered[contender] == true, "Contender not registered";
-    assert gContendersPoints[contender] == 0, "Contender points should not be set";
-
-}
-
 rule vote {
     env e;
     address voter = e.msg.sender;
-    uint256 points = 3;
+    uint256 points_1 = 3;
+    uint256 points_2 = 2;
+    uint256 points_3 = 1;
     address first;
     address second;
     address third;
@@ -211,16 +139,16 @@ rule vote {
 
     // Requirements
     require(voter_details_registered == true);
-    require(gVotersRegistered[voter] == true);
+    //require(gVotersRegistered[voter] == true);
     require(voter_details_blacklisted == false);
-    require(gVotersBlackListed[voter] == false);
+    //require(gVotersBlackListed[voter] == false);
 
     require(contender_details_registered_first == true);
     require(contender_details_registered_second == true);
     require(contender_details_registered_third == true);
-    require(gContendersRegistered[first] == true);
-    require(gContendersRegistered[second] == true);
-    require(gContendersRegistered[third] == true);
+    //require(gContendersRegistered[first] == true);
+    //require(gContendersRegistered[second] == true);
+    //require(gContendersRegistered[third] == true);
     require(first != second);
     require(first != third);
     require(second != third);
@@ -241,9 +169,9 @@ rule vote {
     _, _, contender_details_points_third_after = getFullContenderDetails(third);
 
     // Assertions
-    assert contender_details_points_first_after == contender_details_points_first_before + points, "First Contender points not properly updated";
-    assert contender_details_points_second_after == contender_details_points_second_before + points, "Second Contender points not properly updated";
-    assert contender_details_points_third_after == contender_details_points_third_before + points, "Third Contender points not properly updated";
+    assert contender_details_points_first_after == contender_details_points_first_before + points_1, "First Contender points not properly updated";
+    assert contender_details_points_second_after == contender_details_points_second_before + points_2, "Second Contender points not properly updated";
+    assert contender_details_points_third_after == contender_details_points_third_before + points_3, "Third Contender points not properly updated";
     assert gContendersPoints[first] == contender_details_points_first_after, "First gContender points not properly updated";
     assert gContendersPoints[second] == contender_details_points_second_after, "Second gContender points not properly updated";
     assert gContendersPoints[third] == contender_details_points_third_after, "Third gContender points not properly updated";
@@ -257,50 +185,4 @@ rule vote {
     assert pointsOfWinner >= contender_details_points_third_after, "Winner points not properly updated";
 
 
-}
-
-rule get_points_of_contender {
-    env e;
-    address contender;
-
-    method f;
-    calldataarg args;
-
-    f(e, args);
-
-    assert getPointsOfContender(contender) == gContendersPoints[contender], "getPointsOfContender() should return the same as gContendersPoints[contender]";
-
-}
-
-rule has_voted {
-    env e;
-    address voter;// = e.msg.sender;
-    address first;
-    address second;
-    address third;
-
-    vote(e, first, second, third);
-
-    method f;
-    calldataarg args;
-
-    f(e, args);
-
-    assert hasVoted(voter) == gVotersVoted[voter], "hasVoted() should return the same as gVotersVoted[voter]";
-
-}
-
-rule get_winner {
-    env e;
-
-    method f;
-    calldataarg args;
-
-    f(e, args);
-
-    uint256 pointsOfWinner;
-    address winner;
-    winner, pointsOfWinner = getWinner();
-
-    assert pointsOfWinner == gPointsOfWinner, "pointsOfWinner should be the same as gPointsOfWinner";
 }
