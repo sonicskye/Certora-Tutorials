@@ -54,6 +54,10 @@ ghost mapping(address => bool) gVotersRegistered; // 1 byte
 ghost mapping(address => bool) gVotersVoted; // 1 byte
 ghost mapping(address => uint256) gVotersAttempts; // 32 bytes
 ghost mapping(address => bool) gVotersBlackListed;  // 1 byte
+// We use two ghosts to handle an array _blackList
+// One to store the key-value pairs and another to store the length
+ghost mapping(uint256 => address) gBlackListArr;
+ghost uint256 gBlackListArrLength;
 
 hook Sstore _voters[KEY address voter].(offset 0) uint8 age STORAGE {
     havoc gVotersAge assuming gVotersAge@new[voter] == age;
@@ -93,6 +97,21 @@ hook Sstore _voters[KEY address voter].(offset 64) bool blackListed STORAGE {
 
 hook Sload bool blackListed _voters[KEY address voter].(offset 64) STORAGE {
     require gVotersBlackListed[voter] == blackListed;
+}
+
+hook Sstore _blackList[INDEX uint256 i] address voter STORAGE {
+    havoc gBlackListArr assuming gBlackListArr@new[i] == voter;
+}
+
+hook Sload address voter _blackList[INDEX uint256 i] STORAGE {
+    require gBlackListArr[i] == voter;
+}
+
+// https://docs.certora.com/en/latest/docs/confluence/map/ghosts.html?highlight=ghost%20array#verification-with-ghosts
+// This is because Solidity storage stores the length of the array in the array slot
+// We use slot number here. TODO: check if it is correct.
+hook Sstore (slot 1) uint256 lenNew STORAGE {
+    gBlackListArrLength = lenNew;
 }
 
 ///// pointsOfWinner ghost and hooks /////
@@ -303,4 +322,67 @@ rule get_winner {
     winner, pointsOfWinner = getWinner();
 
     assert pointsOfWinner == gPointsOfWinner, "pointsOfWinner should be the same as gPointsOfWinner";
+}
+
+
+rule voter_not_registered {
+    env e;
+    address voter = e.msg.sender;
+    address first;
+    address second;
+    address third;
+
+    // Requirements
+    require(gVotersRegistered[voter] == false);
+
+    // Action
+    vote@withrevert(e, first, second, third);
+
+    bool success =! lastReverted;
+
+    assert success == false, "Voter not registered should not be able to vote";
+}
+
+// This rule is VIOLATED
+// This indicates that blacklisted voters are able to vote
+rule voter_blacklisted {
+    env e;
+    address voter = e.msg.sender;
+    address first;
+    address second;
+    address third;
+
+    // Requirements
+    require(gVotersBlackListed[voter] == true);
+
+    // Action
+    vote@withrevert(e, first, second, third);
+
+    bool success =! lastReverted;
+
+    assert success == false, "Voter blacklisted should not be able to vote";
+}
+
+
+rule vote_blacklist {
+    env e;
+    address voter = e.msg.sender;
+    address first;
+    address second;
+    address third;
+
+    require(gVotersBlackListed[voter] == true);
+    require(gVotersVoted[voter] == true);
+    require(gVotersAttempts[voter] >= 3);
+
+    vote@withrevert(e, first, second, third);
+
+    bool success =! lastReverted;
+
+    assert gBlackListArrLength > 0, "Blacklist array length should be greater than 0";
+
+    assert success == false, "Voted voter should not be able to vote";
+
+    
+
 }
