@@ -58,6 +58,7 @@ ghost mapping(address => bool) gVotersBlackListed;  // 1 byte
 // One to store the key-value pairs and another to store the length
 ghost mapping(uint256 => address) gBlackListArr;
 ghost uint256 gBlackListArrLength;
+ghost mapping(address => uint256) gBlackListArrIndex;
 
 hook Sstore _voters[KEY address voter].(offset 0) uint8 age STORAGE {
     havoc gVotersAge assuming gVotersAge@new[voter] == age;
@@ -101,10 +102,14 @@ hook Sload bool blackListed _voters[KEY address voter].(offset 64) STORAGE {
 
 hook Sstore _blackList[INDEX uint256 i] address voter STORAGE {
     havoc gBlackListArr assuming gBlackListArr@new[i] == voter;
+    gBlackListArrLength = i;
+    havoc gBlackListArrIndex assuming gBlackListArrIndex@new[voter] == i;
 }
 
 hook Sload address voter _blackList[INDEX uint256 i] STORAGE {
     require gBlackListArr[i] == voter;
+    gBlackListArrLength = i;
+    require gBlackListArrIndex[voter] == i;
 }
 
 // https://docs.certora.com/en/latest/docs/confluence/map/ghosts.html?highlight=ghost%20array#verification-with-ghosts
@@ -112,6 +117,10 @@ hook Sload address voter _blackList[INDEX uint256 i] STORAGE {
 // We use slot number here. TODO: check if it is correct.
 hook Sstore (slot 1) uint256 lenNew STORAGE {
     gBlackListArrLength = lenNew;
+}
+
+hook Sload uint256 len (slot 1) STORAGE {
+    require gBlackListArrLength == len;
 }
 
 ///// pointsOfWinner ghost and hooks /////
@@ -364,24 +373,72 @@ rule voter_blacklisted {
 }
 
 
+// This rule is VIOLATED
+// The voter is never inserted into _blackList array
+// Because the transaction reverts
 rule vote_blacklist {
     env e;
     address voter = e.msg.sender;
     address first;
     address second;
     address third;
+    uint8 voter_details_age;
+    bool voter_details_registered;
+    bool voter_details_voted;
+    uint256 voter_details_attempts;
+    bool voter_details_blacklisted;
+    bool voter_details_blacklisted_after;
 
-    require(gVotersBlackListed[voter] == true);
+    uint8 contender_details_age_first;
+    bool contender_details_registered_first;
+    uint256 contender_details_points_first_before;
+    uint256 contender_details_points_first_after;
+    uint8 contender_details_age_second;
+    bool contender_details_registered_second;
+    uint256 contender_details_points_second_before;
+    uint256 contender_details_points_second_after;
+    uint8 contender_details_age_third;
+    bool contender_details_registered_third;
+    uint256 contender_details_points_third_before;
+    uint256 contender_details_points_third_after;
+
+
+    voter_details_age, voter_details_registered, voter_details_voted, voter_details_attempts, voter_details_blacklisted = getFullVoterDetails(voter);
+    contender_details_age_first, contender_details_registered_first, contender_details_points_first_before = getFullContenderDetails(first);
+    contender_details_age_second, contender_details_registered_second, contender_details_points_second_before = getFullContenderDetails(second);
+    contender_details_age_third, contender_details_registered_third, contender_details_points_third_before = getFullContenderDetails(third);
+
+
+    require(first != second);
+    require(first != third);
+    require(second != third);
+
+    require(voter_details_registered == true);
+    require(gVotersRegistered[voter] == true);
+    require(voter_details_blacklisted == false);
+    require(gVotersBlackListed[voter] == false);
+    require(voter_details_voted == true);
+    require(voter_details_attempts == 2);
     require(gVotersVoted[voter] == true);
-    require(gVotersAttempts[voter] >= 3);
+    require(gVotersAttempts[voter] == 2);
 
+    require(contender_details_registered_first == true);
+    require(contender_details_registered_second == true);
+    require(contender_details_registered_third == true);
+
+    // If @withrevert is used, then the transaction is expected to revert
+    // Then, none of the state variables are updated
     vote@withrevert(e, first, second, third);
+    //vote(e, first, second, third);
 
     bool success =! lastReverted;
 
-    assert gBlackListArrLength > 0, "Blacklist array length should be greater than 0";
-
     assert success == false, "Voted voter should not be able to vote";
+
+    _, _, _, _, voter_details_blacklisted_after = getFullVoterDetails(voter);
+    assert voter_details_blacklisted_after == true, "Voter should be blacklisted";
+    assert gBlackListArrLength > 0, "Blacklist array length should be greater than 0";
+    assert gBlackListArrIndex[voter] > 0, "Voter should be in the blacklist array";
 
     
 

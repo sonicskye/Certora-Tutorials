@@ -5,4 +5,5 @@ solc-select use $SOLC_VERSION
 
 certoraRun BordaBug1.sol:Borda \
   --verify Borda:specs/BordaBug1Dim.spec \
+#  --rule_sanity basic \
 #  --msg "$1"
