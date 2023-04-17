@@ -4,5 +4,5 @@ solc-select install $SOLC_VERSION
 solc-select use $SOLC_VERSION
 
 certoraRun BordaBug1.sol:Borda \
-  --verify Borda:BordaBug1Dim.spec \
+  --verify Borda:specs/BordaBug1Dim.spec \
 #  --msg "$1"
